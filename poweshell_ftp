@@ -1,0 +1,128 @@
+
+#добавляем переменные пути для загрузки 
+$Dir="С:/temp"    
+ 
+#ftp server 
+$ftp = "ftp://myftpserver/folder/" 
+$user = "login"
+$pass = "password"  
+ 
+$webclient = New-Object System.Net.WebClient 
+ 
+$webclient.Credentials = New-Object System.Net.NetworkCredential($user,$pass)  
+ 
+foreach($item in (dir $Dir "*.txt")){ 
+    "Uploading $item..." 
+    $uri = New-Object System.Uri($ftp+$item.Name) 
+    $webclient.UploadFile($uri, $item.FullName) 
+#добавил перенос файлов отправленных на FTP в другую папку
+$item | move-item  -Destination "$Dir/old/"
+ } 
+[/BASH]
+ 
+[size="1"][color="grey"][I]Добавлено через 4 часа 50 минут[/I][/color][/size]
+решил еще до кучи добавить код для скачивания с ftp. после скачивания файлы с FTP будут удалены.
+ 
+[BASH]
+$user1='login on the FTP'
+$pass1='Password on the FTP'
+$local_target1 = 'Local Folder'
+$ftp_uri1='ftp://My Ftp Server'
+$subfolder1='/Folder on the FTP/'
+ 
+function GetFilesListAsArray($user,$pass,$local_target,$ftp_uri,$subfolder)
+{
+ # ftp address from where to download the files
+ $ftp_urix = $ftp_uri + $subfolder
+ $uri=[system.URI] $ftp_urix
+ 
+$ftp=[system.net.ftpwebrequest]::Create($uri)
+ 
+if($user)
+ {
+ $ftp.Credentials=New-Object System.Net.NetworkCredential($user,$pass)
+ }
+ #Get a list of files in the current directory.
+ #Use ListDirectoryDetails instead if you need date, size and other additional file information.
+ $ftp.Method=[system.net.WebRequestMethods+ftp]::ListDirectory
+ $ftp.UsePassive=$true
+ 
+try
+ {
+ $response=$ftp.GetResponse()
+ $strm=$response.GetResponseStream()
+ $reader=New-Object System.IO.StreamReader($strm,'UTF-8')
+ $list=$reader.ReadToEnd()
+ $lines=$list.Split("`n")
+ return $lines
+ }
+ catch{
+ $_|fl * -Force
+ }
+}
+ 
+function DownloadFile ($sourceuri,$targetpath,$username,$password){
+ # Create a FTPWebRequest object to handle the connection to the ftp server
+ $ftprequest = [System.Net.FtpWebRequest]::create($sourceuri)
+ 
+# set the request's network credentials for an authenticated connection
+ $ftprequest.Credentials = New-Object System.Net.NetworkCredential($username,$password)
+ 
+$ftprequest.Method = [System.Net.WebRequestMethods+Ftp]::DownloadFile
+ $ftprequest.UseBinary = $true
+ $ftprequest.KeepAlive = $false
+ 
+# send the ftp request to the server
+ $ftpresponse = $ftprequest.GetResponse()
+ 
+# get a download stream from the server response
+ $responsestream = $ftpresponse.GetResponseStream()
+ 
+# create the target file on the local system and the download buffer
+ try
+ {
+ $targetfile = New-Object IO.FileStream ($targetpath,[IO.FileMode]::Create)
+ "File created: $targetpath"
+ [byte[]]$readbuffer = New-Object byte[] 1024
+ 
+# loop through the download stream and send the data to the target file
+ do{
+ $readlength = $responsestream.Read($readbuffer,0,1024)
+ $targetfile.Write($readbuffer,0,$readlength)
+ }
+ while ($readlength -ne 0)
+ 
+$targetfile.close()
+ }
+ catch
+ {
+ $_|fl * -Force
+ }
+ 
+}
+function DeleteFile ($file,$username,$password){
+ # Delete files from FTP server after download
+ $uri2=[system.URI] $file
+ $request = [system.Net.FtpWebRequest]::Create($uri2)
+ $request.Credentials = New-Object System.Net.NetworkCredential($username,$password)
+ $request.Method = [System.Net.WebRequestMethods+FTP]::DeleteFile
+ $response = $request.GetResponse()
+ "Deleted from FTP: $source" -f $response.StatusDescription
+ $response.Close()
+}
+ 
+$lines = GetFilesListAsArray $user1 $pass1 $local_target1 $ftp_uri1 $subfolder1
+'List of files OK'
+$total_files = 0
+foreach ($line in $lines){
+ if ($line -ne '') {
+ #TRIM the file_name because if it contains blank spaces you will get errors when creating the file
+ $file_name = $line.ToString().Trim()
+ $source = $ftp_uri1 + $subfolder1 + $file_name
+ $target = $local_target1 + $file_name
+ DownloadFile $source $target $user1 $pass1
+ DeleteFile $source $user1 $pass1
+ $total_files = $total_files + 1
+ }
+}
+"Total files downloaded: $total_files"
